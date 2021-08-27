@@ -19,7 +19,7 @@ class TypicalCoreConfig(SimulatorTask):
         }
 
         self.mem_dict = {
-            '--mem-type': 'DDR3_1600_8x8',
+            '--mem-type': 'DDR4_2400_16x4',
             '--cacheline_size': '64',
 
             '--l1i_size': '32kB',

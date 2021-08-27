@@ -3,6 +3,7 @@ import os
 import os.path as osp
 from pprint import pprint
 import hashlib
+from functools import *
 
 
 class SimulatorTask:
@@ -89,6 +90,8 @@ class SimulatorTask:
         assert self.log_dir is not None
 
         # pprint(self.exe)
+        pprint(self.final_options)
+        print(reduce(lambda x,y: x + " " + y, self.final_options))
         print(self)
         # print('log_dir: ', self.log_dir)
         if self.dry_run:
