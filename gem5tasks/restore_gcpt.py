@@ -21,19 +21,20 @@ import gem5tasks.typical_o3_config as tc
 # CurConf = tc.FFG2CL0CG1Config
 
 debug = False
-num_threads = 1
+num_threads = 8
 
 ver = '17'
-gem5_base = '/home51/zyy/projects/omegaflow'
+gem5_base = '/home/zcq/lvna/5g/ff-reshape/'
 exe = f'{gem5_base}/build/RISCV/gem5.opt'
 fs_script = f'{gem5_base}/configs/example/fs.py'
-data_dir = f'/home51/zyy/expri_results/nemu_take_simpoint_cpt_{ver}/' # cpt dir
-top_output_dir = '/home51/zyy/expri_results/' # cpt dir
+data_dir = f'/home/zcq/lvna/5g/research-data/checkpoints_profiles/nemu_take_simpoint_cpt_{ver}/' # cpt dir
+top_output_dir = '/home/zcq/lvna/5g/bm_search/' # cpt dir
 
 workload_filter = []
 
 cpt_desc = CptBatchDescription(data_dir, exe, top_output_dir, ver,
         is_simpoint=True,
+        is_uniform=False,
         simpoints_file=lc.simpoints_file[ver])
 
 parser = cpt_desc.parser
@@ -98,7 +99,7 @@ for task in cpt_desc.tasks:
     task.add_dict_options({
         '--mem-size': '8GB',
         '--generic-rv-cpt': task.cpt_file,
-        '--gcpt-restorer': '/home/zyy/projects/NEMU/resource/gcpt_restore/build/gcpt.bin',
+        '--gcpt-restorer': '/home/zcq/lvna/5g/research-data/gcpt.bin',
         # '--benchmark-stdout': osp.join(task.log_dir, 'workload_out.txt'),
         # '--benchmark-stderr': osp.join(task.log_dir, 'workload_err.txt'),
         '--maxinsts': str(100*10**6),
