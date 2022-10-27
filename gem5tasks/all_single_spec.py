@@ -1,3 +1,4 @@
+from ast import arg
 import os
 import subprocess
 import time
@@ -11,17 +12,14 @@ my_env["LD_PRELOAD"] = '/nfs-nvme/home/share/debug/zhouyaoyang/libz.so.1.2.11.zl
 
 parser = argparse.ArgumentParser(description='Process some cores.')
 parser.add_argument('-n','--np', type=int, default=16)
-parser.add_argument("--after-warmM", type=int, default=40)
-parser.add_argument('-W','--warmup',type=int,default=20_000_000)
+parser.add_argument("--after-warmM", type=int, default=64)
+parser.add_argument('-W','--warmup',type=int,default=50_000_000)
 args = parser.parse_args()
 
-def mix_spec_run(workloads, run_once_script, out_dir_path, warmup=50_000_000,
+def single_spec_run(workloads, run_once_script, out_dir_path, warmup=50_000_000,
 	after_warmM=1, threads=1, ncores=128):
-	base_arguments = ["python3", run_once_script, '-W', str(warmup), "--np=2"]
-	if after_warmM:
-		base_arguments.extend(["--cycle_afterwarm",str(1_000_000*after_warmM)])
-	if args.notie:
-		base_arguments.extend(["--notie"])
+	base_arguments = ["python3", run_once_script, '-W', str(warmup)]
+	base_arguments.extend(["--cycle_afterwarm",str(1_000_000*after_warmM)])
 	proc_count, finish_count = 0, 0
 	max_pending_proc = ncores // threads
 	pending_proc, error_proc = [], []
@@ -34,19 +32,14 @@ def mix_spec_run(workloads, run_once_script, out_dir_path, warmup=50_000_000,
 			max_pending_proc -= 1
 	print("Free cores:", free_cores)
 
+	test_tti_len = [500_000*(2**i)for i in range(0,6)]
 	# generate new full workloads
 	a = []
 	for w in workloads:
-		d = {}
-		d['-b'] = w
-		a.append(d)
-		for i in range(1, 8):
+		for tti_l in test_tti_len:
 			d = {}
 			d['-b'] = w
-			l_mask = (1 << i) - 1
-			r_mask = 0xff ^ l_mask
-			masks = [l_mask,r_mask]
-			d["--l3_waymask_set"] = '-'.join([hex(s) for s in masks])
+			d['--cycle_per_tti'] = str(tti_l)
 			a.append(d)
 
 	workloads = a
@@ -77,13 +70,10 @@ def mix_spec_run(workloads, run_once_script, out_dir_path, warmup=50_000_000,
 					allocate_core = free_cores[0]
 					addition_cmd = []
 					workload_name = workload['-b']
+					tti_len = workload['--cycle_per_tti']
 					addition_cmd.append(f"-b={workload_name}")
-					waymask_set = workload.get("--l3_waymask_set","")
-					if len(waymask_set)>0:
-						addition_cmd.append(f"--l3_waymask_set={waymask_set}")
-					else:
-						waymask_set = 'nopart'
-					result_path = os.path.join(out_dir_path, f"{workload_name}/{waymask_set}")
+					addition_cmd.append(f"--cycle_per_tti={tti_len}")
+					result_path = os.path.join(out_dir_path, f"{workload_name}/{tti_len}")
 					if not os.path.exists(result_path):
 						os.makedirs(result_path, exist_ok=True)
 					addition_cmd.append(f"-D={result_path}")
@@ -116,13 +106,9 @@ def mix_spec_run(workloads, run_once_script, out_dir_path, warmup=50_000_000,
 
 
 if __name__ == '__main__':
-	log_dir = f"/nfs/home/zhangchuanqi/lvna/5g/ff-reshape/log/{args.after_warmM}x1M/"
-	mix_spec_run(['mcf-sphinx3','mcf-omnetpp','mcf-xalancbmk',
-	'omnetpp-sphinx3','omnetpp-xalancbmk',
-	'xalancbmk-sphinx3',
-	'sphinx3-mcf','sphinx3-omnetpp','sphinx3-xalancbmk',
-	'xalancbmk-mcf','xalancbmk-omnetpp',
-	'omnetpp-mcf',],
+	log_dir = f"/nfs/home/zhangchuanqi/lvna/5g/ff-reshape/log/{args.after_warmM}M/"
+	single_spec_run(['mcf','omnetpp','xalancbmk',
+	'sphinx3'],
 	"/nfs/home/zhangchuanqi/lvna/5g/DirtyStuff/gem5tasks/mix_spec.py",
 	out_dir_path = log_dir,
 	ncores = args.np,

@@ -1,27 +1,29 @@
+from ast import arg
+import itertools
 import os
+import random
 import subprocess
 import time
 import signal
 import argparse
+import json
 
 
 my_env = os.environ.copy()
 my_env["LD_PRELOAD"] = '/nfs-nvme/home/share/debug/zhouyaoyang/libz.so.1.2.11.zlib-ng' + os.pathsep + my_env.get("LD_PRELOAD","")
 
+json_path = "/nfs/home/zhangchuanqi/lvna/5g/DirtyStuff/resources/simpoint_cpt_desc/hwfinal.json"
 
 parser = argparse.ArgumentParser(description='Process some cores.')
-parser.add_argument('-n','--np', type=int, default=16)
-parser.add_argument("--after-warmM", type=int, default=40)
+parser.add_argument('-n','--ncores', type=int, default=16)
+parser.add_argument("--num_tti", type=int,required=True,default=None)
 parser.add_argument('-W','--warmup',type=int,default=20_000_000)
 args = parser.parse_args()
 
-def mix_spec_run(workloads, run_once_script, out_dir_path, warmup=50_000_000,
-	after_warmM=1, threads=1, ncores=128):
-	base_arguments = ["python3", run_once_script, '-W', str(warmup), "--np=2"]
-	if after_warmM:
-		base_arguments.extend(["--cycle_afterwarm",str(1_000_000*after_warmM)])
-	if args.notie:
-		base_arguments.extend(["--notie"])
+def mix_mspec(workloads, run_once_script, out_dir_path, threads=1, ncores=128):
+	base_arguments = ["python3", run_once_script, "--cpt-json", json_path, '-W', str(args.warmup), '--np=4']
+	base_arguments.extend(["--num_tti",str(args.num_tti)])
+	# base_arguments.extend(["--l3_size_MB",str(4)])
 	proc_count, finish_count = 0, 0
 	max_pending_proc = ncores // threads
 	pending_proc, error_proc = [], []
@@ -40,14 +42,6 @@ def mix_spec_run(workloads, run_once_script, out_dir_path, warmup=50_000_000,
 		d = {}
 		d['-b'] = w
 		a.append(d)
-		for i in range(1, 8):
-			d = {}
-			d['-b'] = w
-			l_mask = (1 << i) - 1
-			r_mask = 0xff ^ l_mask
-			masks = [l_mask,r_mask]
-			d["--l3_waymask_set"] = '-'.join([hex(s) for s in masks])
-			a.append(d)
 
 	workloads = a
 
@@ -78,12 +72,7 @@ def mix_spec_run(workloads, run_once_script, out_dir_path, warmup=50_000_000,
 					addition_cmd = []
 					workload_name = workload['-b']
 					addition_cmd.append(f"-b={workload_name}")
-					waymask_set = workload.get("--l3_waymask_set","")
-					if len(waymask_set)>0:
-						addition_cmd.append(f"--l3_waymask_set={waymask_set}")
-					else:
-						waymask_set = 'nopart'
-					result_path = os.path.join(out_dir_path, f"{workload_name}/{waymask_set}")
+					result_path = os.path.join(out_dir_path, f"{workload_name}")
 					if not os.path.exists(result_path):
 						os.makedirs(result_path, exist_ok=True)
 					addition_cmd.append(f"-D={result_path}")
@@ -116,14 +105,16 @@ def mix_spec_run(workloads, run_once_script, out_dir_path, warmup=50_000_000,
 
 
 if __name__ == '__main__':
-	log_dir = f"/nfs/home/zhangchuanqi/lvna/5g/ff-reshape/log/{args.after_warmM}x1M/"
-	mix_spec_run(['mcf-sphinx3','mcf-omnetpp','mcf-xalancbmk',
-	'omnetpp-sphinx3','omnetpp-xalancbmk',
-	'xalancbmk-sphinx3',
-	'sphinx3-mcf','sphinx3-omnetpp','sphinx3-xalancbmk',
-	'xalancbmk-mcf','xalancbmk-omnetpp',
-	'omnetpp-mcf',],
-	"/nfs/home/zhangchuanqi/lvna/5g/DirtyStuff/gem5tasks/mix_spec.py",
+	# log_dir = f"/nfs/home/zhangchuanqi/lvna/5g/ff-reshape/log/new_hw_test/period{args.num_tti}/native/"
+	log_dir = f"/nfs/home/zhangchuanqi/lvna/5g/ff-reshape/log/new_hw_test/period{args.num_tti}/4MLLC_native/"
+	with open('/nfs/home/zhangchuanqi/lvna/5g/gem5_data_proc/hw_stats_out_dir/period_hmmer_least.json') as f:
+		work_dict = json.load(f)
+	combined_workloads = work_dict.keys()
+	# task_loads = [f'period_hmmer_o3_{i}' for i in range(4)] + [f'period_hmmer_o2_{i}' for i in range(3)]
+	# combined_workloads = [ '-'.join(e) for e in itertools.permutations(task_loads,4)]
+	# random.seed(1234)
+	# random.shuffle(combined_workloads)
+	mix_mspec(combined_workloads,
+	"/nfs/home/zhangchuanqi/lvna/5g/DirtyStuff/gem5tasks/mix_mspec.py",
 	out_dir_path = log_dir,
-	ncores = args.np,
-	after_warmM=args.after_warmM)
+	ncores = args.ncores)

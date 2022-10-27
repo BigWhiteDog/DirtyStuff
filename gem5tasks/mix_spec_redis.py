@@ -11,17 +11,19 @@ my_env["LD_PRELOAD"] = '/nfs-nvme/home/share/debug/zhouyaoyang/libz.so.1.2.11.zl
 
 parser = argparse.ArgumentParser(description='Process some cores.')
 parser.add_argument('-n','--np', type=int, default=16)
-parser.add_argument("--after-warmM", type=int, default=40)
+parser.add_argument("--after-warmM", type=int)
 parser.add_argument('-W','--warmup',type=int,default=20_000_000)
+parser.add_argument('--enable-clint-sets',type=str,default='0')
 args = parser.parse_args()
 
-def mix_spec_run(workloads, run_once_script, out_dir_path, warmup=50_000_000,
-	after_warmM=1, threads=1, ncores=128):
-	base_arguments = ["python3", run_once_script, '-W', str(warmup), "--np=2"]
-	if after_warmM:
-		base_arguments.extend(["--cycle_afterwarm",str(1_000_000*after_warmM)])
-	if args.notie:
-		base_arguments.extend(["--notie"])
+def mix_spec_run(workloads, run_once_script, out_dir_path,
+	threads=1, ncores=128):
+	base_arguments = ["python3", run_once_script, '-W', str(args.warmup), "--np=2"]
+	if args.after_warmM:
+		base_arguments.extend(["--cycle_afterwarm",str(1_000_000*args.after_warmM)])
+	if args.enable_clint_sets:
+		base_arguments.extend(["--enable-clint-sets",args.enable_clint_sets])
+
 	proc_count, finish_count = 0, 0
 	max_pending_proc = ncores // threads
 	pending_proc, error_proc = [], []
@@ -40,11 +42,11 @@ def mix_spec_run(workloads, run_once_script, out_dir_path, warmup=50_000_000,
 		d = {}
 		d['-b'] = w
 		a.append(d)
-		for i in range(1, 8):
+		for i in range(1, 16):
 			d = {}
 			d['-b'] = w
 			l_mask = (1 << i) - 1
-			r_mask = 0xff ^ l_mask
+			r_mask = 0xffff ^ l_mask
 			masks = [l_mask,r_mask]
 			d["--l3_waymask_set"] = '-'.join([hex(s) for s in masks])
 			a.append(d)
@@ -116,14 +118,11 @@ def mix_spec_run(workloads, run_once_script, out_dir_path, warmup=50_000_000,
 
 
 if __name__ == '__main__':
-	log_dir = f"/nfs/home/zhangchuanqi/lvna/5g/ff-reshape/log/{args.after_warmM}x1M/"
-	mix_spec_run(['mcf-sphinx3','mcf-omnetpp','mcf-xalancbmk',
-	'omnetpp-sphinx3','omnetpp-xalancbmk',
-	'xalancbmk-sphinx3',
-	'sphinx3-mcf','sphinx3-omnetpp','sphinx3-xalancbmk',
-	'xalancbmk-mcf','xalancbmk-omnetpp',
-	'omnetpp-mcf',],
+	if args.after_warmM:
+		log_dir = f"/nfs/home/zhangchuanqi/lvna/5g/ff-reshape/log/incl/{args.after_warmM}x1M/"
+	else:
+		log_dir = f"/nfs/home/zhangchuanqi/lvna/5g/ff-reshape/log/incl/full{args.warmup}/"
+	mix_spec_run(['user_redis1-omnetpp','user_redis1-xalancbmk','user_redis1-mcf'],
 	"/nfs/home/zhangchuanqi/lvna/5g/DirtyStuff/gem5tasks/mix_spec.py",
 	out_dir_path = log_dir,
-	ncores = args.np,
-	after_warmM=args.after_warmM)
+	ncores = args.np)

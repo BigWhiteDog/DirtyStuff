@@ -5,12 +5,12 @@ import argparse
 import time
 import json
 
-
 ff_base = '/nfs/home/zhangchuanqi/lvna/5g/ff-reshape/'
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-b','--benchmark', type=str, required=True,help="like gcc-xal-xal-xal")
 parser.add_argument('--l3_waymask_set', type=str, help="like ff-ff00")
+parser.add_argument('--l3_waymask_high_set', type=str, help="like ff-ff00")
 parser.add_argument('--l2_waymask_set', type=str, help="like ff-ff00")
 parser.add_argument('-I','--insts',type=int,default=10_000_000)
 parser.add_argument('--cycle_afterwarm',type=int,default=None)
@@ -21,10 +21,15 @@ parser.add_argument('-W','--warmup',type=int,default=50_000_000)
 parser.add_argument('-D','--output',type=str,default='',help='output dir')
 parser.add_argument('--debug-flag',type=str)
 parser.add_argument('-C','--compile', action="store_true",help="compile Gem5 first")
-parser.add_argument('--l2inc',type=int,default=1)
-parser.add_argument('--l3inc',type=int,default=1)
+parser.add_argument('--l2_tb_freq',type=int,default=256)
+parser.add_argument('--l2_tb_inc',type=int,default=1024)
 parser.add_argument('--l2_tb_size',type=int,default=1024)
-parser.add_argument('--l3_tb_size',type=int,default=2048)
+parser.add_argument('--l3_tb_freq',type=int,default=256)
+parser.add_argument('--l3_tb_inc',type=int,default=1024)
+parser.add_argument('--l3_tb_size',type=int,default=1024)
+parser.add_argument('--l3_assoc',type=int,default=8)
+parser.add_argument('--num_tti',type=int,default=None)
+parser.add_argument('--single_mode',action='store_true',default=False)
 parser.add_argument('--enable-clint-sets',type=str,default=None)
 parser.add_argument('--cpt-json',type=str,default="/nfs/home/zhangchuanqi/lvna/5g/DirtyStuff/resources/simpoint_cpt_desc/06_max_redis_path.json")
 args = parser.parse_args()
@@ -63,23 +68,28 @@ opt.append('--mem-size={}GB'.format(args.np * 8))
 
 opt.append('--cacheline_size=64')
 opt.append('--caches --l2cache --l3_cache')
-opt.append('--l1i_size=32kB --l1i_assoc=8')
+opt.append('--l1i_size=64kB --l1i_assoc=4')
 opt.append('--l1d_size=32kB --l1d_assoc=8')
 
-opt.append('--l2_size=1MB --l2_assoc=16')
+opt.append('--l2_size=768kB --l2_assoc=12')
+if args.np != 1:
+    opt.append('--sharel2')
 opt.append('--l2_slices=1024')
-opt.append('--l3_size=2MB --l3_assoc=8')
-opt.append('--l3_slices=4096')
+opt.append(f'--l3_size={args.l3_assoc * 256}kB --l3_assoc={args.l3_assoc}')
+opt.append('--l3_slices=2048')
 
 # opt.append('--incll3')
-opt.append('--l1d-hwp-type=StridePrefetcher')
-opt.append('--l2-hwp-type=BOPPrefetcher')
+# opt.append('--l1d-hwp-type=StridePrefetcher')
+# opt.append('--l2-hwp-type=BOPPrefetcher')
 
-opt.append('--l2inc={} --l3inc={}'.format(args.l2inc, args.l3inc))
 opt.append('--l2_tb_size={} --l3_tb_size={}'.format(args.l2_tb_size, args.l3_tb_size))
+opt.append('--l2_tb_freq={} --l3_tb_freq={}'.format(args.l2_tb_freq, args.l3_tb_freq))
+opt.append('--l2_tb_inc={} --l3_tb_inc={}'.format(args.l2_tb_inc, args.l3_tb_inc))
 
 if args.l3_waymask_set:
     opt.append('--l3_waymask_set="{}"'.format(args.l3_waymask_set))
+if args.l3_waymask_high_set:
+    opt.append('--l3_waymask_high_set="{}"'.format(args.l3_waymask_high_set))
 if args.l2_waymask_set:
     opt.append('--l2_waymask_set="{}"'.format(args.l2_waymask_set))
 
@@ -96,6 +106,8 @@ opt.append('--gcpt-restorer=' + gcpt_bin_path)
 opt.append('--gcpt-warmup={}'.format(args.warmup))
 if args.cycle_afterwarm:
     opt.append('--cycle_afterwarm={}'.format(args.cycle_afterwarm))
+elif args.num_tti:
+    opt.append('--num_tti={}'.format(args.num_tti))
 else:
     opt.append('--maxinsts0={}'.format(2*args.warmup, args.warmup))
 
