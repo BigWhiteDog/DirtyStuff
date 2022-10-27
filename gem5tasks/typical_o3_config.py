@@ -11,28 +11,32 @@ class TypicalCoreConfig(SimulatorTask):
             '--caches',
             '--l2cache',
             '--l3_cache',
-            '--enable-loop-buffer',
         ]
 
         self.core_dict = {
             '--branch-trace-file': 'useless_branch.protobuf.gz',
+            '--mmc-img':'/nfs/home/zhangchuanqi/lvna/new_micro/tail-sd.img',
         }
 
         self.mem_dict = {
             '--mem-type': 'DDR4_2400_16x4',
             '--cacheline_size': '64',
 
-            '--l1i_size': '64kB',
-            '--l1i_assoc': '4',
+            '--l1i_size': '32kB',
+            '--l1i_assoc': '8',
 
             '--l1d_size': '32kB',
             '--l1d_assoc': '8',
+            '--l1d-hwp-type':'StridePrefetcher',
 
-            '--l2_size': '768kB',
-            '--l2_assoc': '12',
+            '--l2_size': '1MB',
+            '--l2_assoc': '16',
+            '--l2_slices': '1024',
+            '--l2-hwp-type':'BOPPrefetcher',
 
-            '--l3_size': '2MB',
+            '--l3_size': '8MB',
             '--l3_assoc': '8',
+        #     '--l3_slices': '16384',
         }
 
         self.dict_options = {
@@ -105,6 +109,40 @@ class TypicalO3Config(TypicalCoreConfig):
                 }
         self.add_dict_options(self.o3_dict)
 
+class O3_2_14(FullWindowO3Config):
+    def __init__(self, exe: str, top_data_dir: str, task_name: str, workload: str, sub_phase: int):
+        super().__init__(exe, top_data_dir, task_name, workload, sub_phase)
+        self.add_dict_options({
+                '--l2_waymask_set':'3-fffc'
+        })
+
+class O3_4_12(FullWindowO3Config):
+    def __init__(self, exe: str, top_data_dir: str, task_name: str, workload: str, sub_phase: int):
+        super().__init__(exe, top_data_dir, task_name, workload, sub_phase)
+        self.add_dict_options({
+                '--l2_waymask_set':'f-fff0'
+        })
+
+class O3_8_8(FullWindowO3Config):
+    def __init__(self, exe: str, top_data_dir: str, task_name: str, workload: str, sub_phase: int):
+        super().__init__(exe, top_data_dir, task_name, workload, sub_phase)
+        self.add_dict_options({
+                '--l2_waymask_set':'ff-ff00'
+        })
+
+class O3_12_4(FullWindowO3Config):
+    def __init__(self, exe: str, top_data_dir: str, task_name: str, workload: str, sub_phase: int):
+        super().__init__(exe, top_data_dir, task_name, workload, sub_phase)
+        self.add_dict_options({
+                '--l2_waymask_set':'fff-f000'
+        })
+
+class O3_14_2(FullWindowO3Config):
+    def __init__(self, exe: str, top_data_dir: str, task_name: str, workload: str, sub_phase: int):
+        super().__init__(exe, top_data_dir, task_name, workload, sub_phase)
+        self.add_dict_options({
+                '--l2_waymask_set':'3fff-c000'
+        })
 
 class TypicalFFConfig(TypicalCoreConfig):
     def __init__(self, exe: str, top_data_dir: str, task_name: str, workload: str, sub_phase: int):

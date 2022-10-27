@@ -21,14 +21,14 @@ import gem5tasks.typical_o3_config as tc
 # CurConf = tc.FFG2CL0CG1Config
 
 debug = False
-num_threads = 8
+num_threads = 120
 
 ver = '17'
-gem5_base = '/home/zcq/lvna/5g/ff-reshape/'
+gem5_base = '/nfs/home/zhangchuanqi/lvna/5g/ff-reshape/'
 exe = f'{gem5_base}/build/RISCV/gem5.opt'
 fs_script = f'{gem5_base}/configs/example/fs.py'
-data_dir = f'/home/zcq/lvna/5g/research-data/checkpoints_profiles/nemu_take_simpoint_cpt_{ver}/' # cpt dir
-top_output_dir = '/home/zcq/lvna/5g/bm_search/' # cpt dir
+data_dir = f'/nfs-nvme/home/share/checkpoints_profiles/spec17_rv64gc_o2_50m/take_cpt/' # cpt dir
+top_output_dir = '/nfs/home/zhangchuanqi/lvna/5g/cdp_search/' # cpt dir
 
 workload_filter = []
 
@@ -48,7 +48,7 @@ if args.config is not None:
     CurConf = eval(f'tc.{args.config}')
 else:
     CurConf = tc.FullWindowO3Config
-task_name = f'test_new_wrapper{ver}/{CurConf.__name__}'
+task_name = f'all_50m_wrapper{ver}/{CurConf.__name__}'
 cpt_desc.set_task_filter()
 cpt_desc.set_conf(CurConf, task_name)
 cpt_desc.filter_tasks()
@@ -96,10 +96,11 @@ for task in cpt_desc.tasks:
             ])
 
     task.add_direct_options([fs_script])
+    task.add_direct_options(['--nohype',])
     task.add_dict_options({
         '--mem-size': '8GB',
         '--generic-rv-cpt': task.cpt_file,
-        '--gcpt-restorer': '/home/zcq/lvna/5g/research-data/gcpt.bin',
+        '--gcpt-restorer': '/nfs/home/zhangchuanqi/lvna/for_xs/xs-env/NEMU/resource/gcpt_restore/build/gcpt-ori.bin',
         # '--benchmark-stdout': osp.join(task.log_dir, 'workload_out.txt'),
         # '--benchmark-stderr': osp.join(task.log_dir, 'workload_err.txt'),
         '--maxinsts': str(100*10**6),
