@@ -28,6 +28,7 @@ parser.add_argument('--l3_tb_freq',type=int,default=256)
 parser.add_argument('--l3_tb_inc',type=int,default=1024)
 parser.add_argument('--l3_tb_size',type=int,default=1024)
 parser.add_argument('--l3_size_MB',type=int,default=2)
+parser.add_argument('--l3_assoc',type=int,default=8)
 parser.add_argument('--num_tti',type=int,default=None)
 parser.add_argument('--l3_hot_threshold',type=float,default=None)
 parser.add_argument('--single_mode',action='store_true',default=False)
@@ -76,8 +77,12 @@ opt.append('--l2_size=768kB --l2_assoc=12')
 if args.np != 1:
     opt.append('--sharel2')
 opt.append('--l2_slices=1024')
-opt.append(f'--l3_size={args.l3_size_MB}MB --l3_assoc=8')
-opt.append('--l3_slices={}'.format(2048*args.l3_size_MB))
+if args.l3_assoc == 8:
+    opt.append(f'--l3_size={args.l3_size_MB}MB --l3_assoc=8')
+    opt.append('--l3_slices={}'.format(2048*args.l3_size_MB))
+else:
+    opt.append(f'--l3_size={args.l3_assoc * 256}kB --l3_assoc={args.l3_assoc}')
+    opt.append('--l3_slices=4096')
 
 # opt.append('--incll3')
 # opt.append('--l1d-hwp-type=StridePrefetcher')
