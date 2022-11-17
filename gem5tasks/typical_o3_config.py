@@ -10,7 +10,8 @@ class TypicalCoreConfig(SimulatorTask):
         self.list_conf = [
             '--caches',
             '--l2cache',
-            '--l3_cache',
+            '--l3cache',
+            # '--enable-loop-buffer',
         ]
 
         self.core_dict = {
@@ -92,7 +93,7 @@ class Smarts8WO3Config(Typical8WO3Config):
                 }
         self.add_dict_options(self.mem_dict)
         self.list_options.remove(
-                '--l3_cache',
+                '--l3cache',
                 )
 
 
@@ -331,7 +332,7 @@ class Functional4XSConfig(SimulatorTask):
         self.list_conf = [
                 '--caches',
                 '--l2cache',
-                '--l3_cache',
+                '--l3cache',
                 ]
         self.add_list_options(self.list_conf)
 
@@ -342,3 +343,115 @@ class Functional4XSConfig(SimulatorTask):
                 '--l3_size': '4MB',
                 }
         self.add_dict_options(self.dict_conf)
+
+class NanhuNoL3(SimulatorTask):
+    def __init__(self, exe: str, top_data_dir: str, task_name: str, workload: str, sub_phase: int):
+        super().__init__(exe, top_data_dir, task_name, workload, sub_phase)
+        self.list_conf = [
+                '--caches',
+                '--l2cache',
+                '--enable-difftest',
+                '--xiangshan'
+                ]
+        self.add_list_options(self.list_conf)
+        self.dict_conf = {
+                '--cpu-type': 'DerivO3CPU',
+                '--mem-type': 'DDR3_1600_8x8',
+                '--mem-size': '8GB',
+                '--cacheline_size': 64,
+                '--l1i_size': '128kB',
+                '--l1i_assoc': 8,
+                '--l1d_size': '128kB',
+                '--l1d_assoc': 8,
+                '--l2_size': '1MB',
+                '--l2_assoc': 8,
+                }
+        self.add_dict_options(self.dict_conf)
+
+class NanhuWithRationalL1NoL3(NanhuNoL3):
+    def __init__(self, exe: str, top_data_dir: str, task_name: str, workload: str, sub_phase: int):
+        super().__init__(exe, top_data_dir, task_name, workload, sub_phase)
+        self.dict_conf = {
+                '--l1i_size': '64kB',
+                '--l1d_size': '64kB',
+                }
+        self.add_dict_options(self.dict_conf)
+
+
+class NanhuConfig(NanhuWithRationalL1NoL3):
+    def __init__(self, exe: str, top_data_dir: str, task_name: str, workload: str, sub_phase: int):
+        super().__init__(exe, top_data_dir, task_name, workload, sub_phase)
+        self.list_conf = [
+                '--l3cache',
+                ]
+        self.add_list_options(self.list_conf)
+        self.dict_conf = {
+                '--l3_size': '6MB',
+                '--l3_assoc': 6,
+                }
+        self.add_dict_options(self.dict_conf)
+
+class Nanhu32kIC(NanhuConfig):
+    def __init__(self, exe: str, top_data_dir: str, task_name: str, workload: str, sub_phase: int):
+        super().__init__(exe, top_data_dir, task_name, workload, sub_phase)
+        self.dict_conf = {
+                '--l1i_assoc': 4,
+                '--l1i_size': '32kB',
+                '--l1i-hwp-type': 'FDIP',
+                }
+        self.add_dict_options(self.dict_conf)
+
+class Nanhu32kICwithPIF(Nanhu32kIC):
+    def __init__(self, exe: str, top_data_dir: str, task_name: str, workload: str, sub_phase: int):
+        super().__init__(exe, top_data_dir, task_name, workload, sub_phase)
+        self.dict_conf = {
+                '--l1i-hwp-type': 'PIFPrefetcher',
+                }
+        self.add_dict_options(self.dict_conf)
+
+class NanhuHugeL1(NanhuConfig):
+    def __init__(self, exe: str, top_data_dir: str, task_name: str, workload: str, sub_phase: int):
+        super().__init__(exe, top_data_dir, task_name, workload, sub_phase)
+        self.dict_conf = {
+                '--l1i_size': '1MB',
+                }
+        self.add_dict_options(self.dict_conf)
+
+class L2AsL1(NanhuConfig):
+    def __init__(self, exe: str, top_data_dir: str, task_name: str, workload: str, sub_phase: int):
+        super().__init__(exe, top_data_dir, task_name, workload, sub_phase)
+        self.add_dict_options({
+                '--l1d_size': '176kB',
+                '--l1d_assoc': 11,
+                '--l2_size': '1024kB',
+                '--l2_assoc': 8,
+            })
+
+class SimpleBTB(NanhuConfig):
+    def __init__(self, exe: str, top_data_dir: str, task_name: str, workload: str, sub_phase: int):
+        super().__init__(exe, top_data_dir, task_name, workload, sub_phase)
+        self.add_dict_options({
+                '--indirect-bp-type': 'SimpleIndirectPredictor',
+            })
+
+class ITTAGE(NanhuConfig):
+    def __init__(self, exe: str, top_data_dir: str, task_name: str, workload: str, sub_phase: int):
+        super().__init__(exe, top_data_dir, task_name, workload, sub_phase)
+        self.add_dict_options({
+                '--indirect-bp-type': 'ITTAGE',
+            })
+class TBPConfig(NanhuConfig):
+    def __init__(self, exe: str, top_data_dir: str, task_name: str, workload: str, sub_phase: int):
+        super().__init__(exe, top_data_dir, task_name, workload, sub_phase)
+        self.add_dict_options({
+                '--indirect-bp-type': 'ITTAGE',
+                '--bp-type': 'LTAGE',
+            })
+
+class TBP32KIC(TBPConfig):
+    def __init__(self, exe: str, top_data_dir: str, task_name: str, workload: str, sub_phase: int):
+        super().__init__(exe, top_data_dir, task_name, workload, sub_phase)
+        self.add_dict_options({
+                '--l1i_size': '32kB',
+                '--l1i_assoc': 4,
+            })

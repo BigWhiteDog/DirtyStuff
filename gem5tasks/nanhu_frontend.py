@@ -1,6 +1,7 @@
 import os
 import sys
 import os.path as osp
+import sh
 
 from common import local_config as lc
 from cptdesc import CptBatchDescription
@@ -13,11 +14,16 @@ import gem5tasks.typical_o3_config as tc
 # 2. killall -15 gem5.opt or gem5.fast to kill all launched threads
 
 debug = False
-num_threads = 120
+
+# The number of threads
+num_threads = 20
 
 # SPEC 17 or 06
-ver = '17'
-gem5_base = '/nfs/home/zhangchuanqi/lvna/for_xs/GEM5-internal'
+ver = '06'
+
+# The root dir of GEM5
+# gem5_base = '/nfs-nvme/home/zhouyaoyang/projects/xs-gem5'
+gem5_base = '/nfs-nvme/home/zhouyaoyang/projects/xs-gem5-frontend'
 exe = f'{gem5_base}/build/RISCV/gem5.opt'
 fs_script = f'{gem5_base}/configs/example/fs.py'
 
@@ -25,10 +31,10 @@ fs_script = f'{gem5_base}/configs/example/fs.py'
 # The RISC-V Generic checkpoint format is defined by Xiangshan Team
 # Brief introduction here:
 # https://github.com/OpenXiangShan/XiangShan-doc/blob/main/tutorial/others/Checkpoint%E7%9A%84%E7%94%9F%E6%88%90.md
-data_dir = f'/nfs-nvme/home/share/checkpoints_profiles/spec17_rv64gc_o2_50m/take_cpt/' # cpt dir
+data_dir = '/nfs-nvme/home/share/checkpoints_profiles/spec06_rv64gc_o2_50m/take_cpt' # cpt dir
 
 # The directory to store GEM5 outputs (logs, configs, and stats)
-top_output_dir = '/nfs/home/zhangchuanqi/lvna/for_xs/cacheconflict_search/' # cpt dir
+top_output_dir = '/nfs-nvme/home/zhouyaoyang/gem5-results' # output dir
 
 cpt_desc = CptBatchDescription(data_dir, exe, top_output_dir, ver,
         is_simpoint=True,  # Set it True when you are using checkpoints taken with NEMU and SimPoint method
@@ -37,7 +43,9 @@ cpt_desc = CptBatchDescription(data_dir, exe, top_output_dir, ver,
         # This option chooses the checkpoint filter
         # The checkpoint filter indicates whick checkpoints should be executed
         # The checkpoint filter is loaded from a json file, to local_config.py to see details
-        simpoints_file=lc.simpoints_file_short[ver],
+        # simpoints_file="resources/simpoint_cpt_desc/simpoints06_branch_picks.json",
+        # simpoints_file="resources/simpoint_cpt_desc/simpoints06_cover0.50_top5.json",
+        simpoints_file="resources/simpoint_cpt_desc/simpoints06_icache_sensitive.json",
         )
 
 parser = cpt_desc.parser
@@ -52,9 +60,13 @@ if args.config is not None:
     # Example configs are defined in typical_o3_config.py
     CurConf = eval(f'tc.{args.config}')
 else:
-    CurConf = tc.FullWindowO3Config
+    CurConf = tc.NanhuNoL3
 
-task_name = f'test_new_wrapper{ver}/{CurConf.__name__}'
+cwd = os.getcwd()
+os.chdir(gem5_base)
+tag = sh.git('rev-parse --short HEAD'.split(' ')).strip()
+
+task_name = f'frontend_{ver}/{CurConf.__name__}-{tag}'
 cpt_desc.set_task_filter()
 cpt_desc.set_conf(CurConf, task_name)
 cpt_desc.filter_tasks()
@@ -81,7 +93,6 @@ debug_tick = None
 if args.debug_tick is not None:
     debug_tick = args.debug_tick
     debug_flags = frontend_flags + backend_flags
-
 
 for task in cpt_desc.tasks:
     task.sub_workload_level_path_format()
@@ -110,12 +121,12 @@ for task in cpt_desc.tasks:
         # This option provides us a method to override the "GCPT restorer" when loading
         # the RISC-V generic checkpoint.
         # resource/gcpt_restore can be found in https://github.com/OpenXiangShan/NEMU/tree/cpp-gem5
-        '--gcpt-restorer': '/nfs/home/zhangchuanqi/lvna/for_xs/xs-env/NEMU/resource/gcpt_restore/build/gcpt-ori.bin',
+        '--gcpt-restorer': '/nfs-nvme/home/zhouyaoyang/projects/gem5-ref-sd-nemu/resource/gcpt_restore/build/gcpt.bin',
 
         # '--benchmark-stdout': osp.join(task.log_dir, 'workload_out.txt'),
         # '--benchmark-stderr': osp.join(task.log_dir, 'workload_err.txt'),
         '--maxinsts': str(100*10**6),
-        '--gcpt-warmup': str(50*10**6),
+        '--warmup-insts-no-switch': str(50*10**6),
         # '--gcpt-repeat-interval': str(10**4),
     })
     task.format_options()
