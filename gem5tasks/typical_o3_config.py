@@ -350,8 +350,8 @@ class NanhuNoL3(SimulatorTask):
         self.list_conf = [
                 '--caches',
                 '--l2cache',
-                '--enable-difftest',
-                '--xiangshan'
+                # '--enable-difftest',
+                '--xiangshan-system'
                 ]
         self.add_list_options(self.list_conf)
         self.dict_conf = {
@@ -365,6 +365,7 @@ class NanhuNoL3(SimulatorTask):
                 '--l1d_assoc': 8,
                 '--l2_size': '1MB',
                 '--l2_assoc': 8,
+                '--l2-hwp-type': 'BOPPrefetcher',
                 }
         self.add_dict_options(self.dict_conf)
 
@@ -390,6 +391,33 @@ class NanhuConfig(NanhuWithRationalL1NoL3):
                 '--l3_assoc': 6,
                 }
         self.add_dict_options(self.dict_conf)
+
+class Nanhu8ML3Config(NanhuWithRationalL1NoL3):
+    def __init__(self, exe: str, top_data_dir: str, task_name: str, workload: str, sub_phase: int):
+        super().__init__(exe, top_data_dir, task_name, workload, sub_phase)
+        self.list_conf = [
+                '--l3cache',
+                ]
+        self.add_list_options(self.list_conf)
+        self.dict_conf = {
+                '--l3_size': '8MB',
+                '--l3_assoc': 8,
+                }
+        self.add_dict_options(self.dict_conf)
+
+class Nanhu8M16assL3Config(NanhuWithRationalL1NoL3):
+    def __init__(self, exe: str, top_data_dir: str, task_name: str, workload: str, sub_phase: int):
+        super().__init__(exe, top_data_dir, task_name, workload, sub_phase)
+        self.list_conf = [
+                '--l3cache',
+                ]
+        self.add_list_options(self.list_conf)
+        self.dict_conf = {
+                '--l3_size': '8MB',
+                '--l3_assoc': 16,
+                }
+        self.add_dict_options(self.dict_conf)
+
 
 class Nanhu32kIC(NanhuConfig):
     def __init__(self, exe: str, top_data_dir: str, task_name: str, workload: str, sub_phase: int):
