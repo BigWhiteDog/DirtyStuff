@@ -59,7 +59,10 @@ class CptBatchDescription:
         self.workload_filter = []
 
         self.task_filter = []
-        self.task_blacklist = [f.replace('/', '_') for f in task_blacklist[ver]]
+        if ver in task_blacklist:
+            self.task_blacklist = [f.replace('/', '_') for f in task_blacklist[ver]]
+        else:
+            self.task_blacklist = []
 
         self.args = None
 

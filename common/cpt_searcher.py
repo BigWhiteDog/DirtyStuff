@@ -64,7 +64,13 @@ def find_nemu_simpoint_cpts(d: str):
         if osp.isfile(osp.join(d, simpoint)):
             continue
         segments = simpoint.split('_')
-        inst_count = segments[-2]
+        if len(segments) < 3:
+            continue
+        try:
+            inst_count = int(segments[-2])
+            weight = float(segments[-1])
+        except ValueError:
+            continue
         workload = segments[:-2]
         workload = '_'.join(workload)
         point_dir = osp.join(d, simpoint)
