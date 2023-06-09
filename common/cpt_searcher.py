@@ -82,10 +82,42 @@ def find_nemu_simpoint_cpts(d: str):
         cpt_dir = osp.join(point_dir, cpt)
         if not osp.isdir(cpt_dir):
             continue
-        cpt_file = os.listdir(cpt_dir)[0]
+        cpt_files = os.listdir(cpt_dir)
+        cpt_file = next(filter(lambda x: x.endswith('.gz'), cpt_files))
         cpt_file = osp.join(cpt_dir, cpt_file)
         assert osp.isfile(cpt_file)
 
         TaskSummary[workload][int(inst_count)] = cpt_file
     return TaskSummary
+
+def find_nemu_simpoint_cpts_weights(d: str):
+    weightSummary = {}
+    for simpoint in os.listdir(d):
+        if osp.isfile(osp.join(d, simpoint)):
+            continue
+        segments = simpoint.split('_')
+        if len(segments) < 3:
+            continue
+        try:
+            inst_count = int(segments[-2])
+            weight = float(segments[-1])
+        except ValueError:
+            continue
+        workload = segments[:-2]
+        workload = '_'.join(workload)
+        point_dir = osp.join(d, simpoint)
+        if not osp.isdir(point_dir):
+            continue
+        if workload not in weightSummary:
+            weightSummary[workload] = {}
+        cpt = '0'
+        cpt_dir = osp.join(point_dir, cpt)
+        if not osp.isdir(cpt_dir):
+            continue
+        cpt_file = os.listdir(cpt_dir)[0]
+        cpt_file = osp.join(cpt_dir, cpt_file)
+        assert osp.isfile(cpt_file)
+
+        weightSummary[workload][int(inst_count)] = float(weight)
+    return weightSummary
 
