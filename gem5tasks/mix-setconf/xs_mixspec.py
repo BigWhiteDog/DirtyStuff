@@ -5,7 +5,8 @@ import argparse
 import time
 import json
 
-ff_base = '/nfs/home/zhangchuanqi/lvna/for_xs/GEM5-internal'
+ff_base = '/nfs/home/zhangchuanqi/lvna/for_xs/intgem5-lazycat'
+need_clint_sd_works = ['imgdnn','moses','xapian','specjbb','sphinx']
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-b','--benchmark', type=str, required=True,help="like gcc-xal-xal-xal")
@@ -18,9 +19,18 @@ parser.add_argument('--debug-flag',type=str)
 parser.add_argument('--enable_archdb', action='store_true')
 parser.add_argument('--nohype',action='store_true')
 # parser.add_argument('--l3_size_MB',type=int,default=8)
+parser.add_argument('--cache-type',choices=['oldinc','xs','goldencove','skylake'],
+                    required=True)
 parser.add_argument('--l3_assoc',type=int,default=8)
 parser.add_argument('--l3_waymask_set', type=str, help="like ff-ff00")
-parser.add_argument('--enable-clint-sets',type=str,default=None)
+parser.add_argument('--l3_qos_csvfile', type=str, default=None)
+parser.add_argument('--l3_qos_grow_target', type=int, default=None)
+parser.add_argument('--l3_qos_policy_set', type=str, default=None)
+parser.add_argument("--insts-stop-event-afterwarm",type=int,default=None)
+parser.add_argument("--insts-test-afterstop",type=int,default=None)
+parser.add_argument("--start-qos-fromstart", action="store_true",
+        help="start qos from start")
+# parser.add_argument('--enable-clint-sets',type=str,default=None)
 parser.add_argument('--cpt-json',type=str,default="/nfs/home/zhangchuanqi/lvna/5g/DirtyStuff/resources/simpoint_cpt_desc/06_max_path.json")
 args = parser.parse_args()
 
@@ -32,7 +42,8 @@ with open(path_file) as f:
     benchmark_cpt_file = json.load(f)
 
 
-gcpt_bin_path = '/nfs/home/zhangchuanqi/lvna/for_xs/xs-env/NEMU/resource/gcpt_restore/build/gcpt-ori.bin'
+gcpt_notie_bin_path = '/nfs/home/zhangchuanqi/lvna/for_xs/xs-env/nemu-sdcard-cpt/resource/gcpt_restore/build/gcpt-disable-tie.bin'
+gcpt_tie_bin_path = '/nfs/home/zhangchuanqi/lvna/for_xs/xs-env/nemu-sdcard-cpt/resource/gcpt_restore/build/gcpt-enable-tie.bin'
 
 
 # ==================  Basics  ==================
@@ -48,6 +59,8 @@ opt.append('--xiangshan-system')
 
 if args.nohype:
     opt.append('--nohype')
+    if args.start_qos_fromstart:
+        opt.append('--start-qos-fromstart')
 else:
     assert(args.np == 1)
 
@@ -64,36 +77,167 @@ opt.append('--num-cpus={}'.format(args.np))
 opt.append('--cpu-type=DerivO3CPU')
 opt.append('--bp-type=LTAGE')
 # opt.append('--mem-type=DRAMsim3')
-opt.append('--mem-type=DDR4_2400_16x4')
+# opt.append('--mem-type=DDR4_2400_16x4')
+# opt.append('--mem-type=DDR3_1600_8x8')
 opt.append('--mem-size={}GB'.format(args.np * 8))
 # opt.append('--mem-channels=2')
 
 opt.append('--cacheline_size=64')
 opt.append('--caches --l2cache --l3cache')
-opt.append('--l1i_size=128kB --l1i_assoc=8')
-opt.append('--l1d_size=128kB --l1d_assoc=8')
 
-opt.append('--l2_size=1MB --l2_assoc=8')
-opt.append(f'--l3_size={args.l3_assoc}MB --l3_assoc={args.l3_assoc}')
+#set memory and caches
+if args.cache_type == 'oldinc':
+    opt.append('--l1i_size=32kB --l1i_assoc=4')
+    opt.append('--l1i_tag_latency=1')
+    opt.append('--l1i_data_latency=2')
+    opt.append('--l1i_response_latency=1')
+    opt.append('--l1i-rp-type=TreePLRURP')
+
+    opt.append('--l1d_size=32kB --l1d_assoc=4')
+    opt.append('--l1d_tag_latency=1')
+    opt.append('--l1d_data_latency=2')
+    opt.append('--l1d_response_latency=1')
+    opt.append('--l1d-rp-type=TreePLRURP')
+    
+    opt.append('--l2_size=256kB --l2_assoc=8')
+    opt.append('--l2_tag_latency=1')
+    opt.append('--l2_data_latency=4')
+    opt.append('--l2_response_latency=1')
+    opt.append('--l2-rp-type=TreePLRURP')
+    
+    opt.append(f'--l3_size={args.l3_assoc * 512}kB --l3_assoc={args.l3_assoc}')
+    opt.append('--l3_tag_latency=8')
+    opt.append('--l3_data_latency=27')
+    opt.append('--l3_response_latency=8')
+    # opt.append('--l3_size=8MB --l3_assoc=16')
+    
+    opt.append('--l2-clusivity=mostly_incl')
+    opt.append('--l3-clusivity=mostly_incl')
+
+    opt.append('--mem-type=DDR3_1600_8x8')
+
+    opt.append('--cpu-clock=2.66GHz')
+
+elif args.cache_type == 'goldencove':
+    #l1i
+    opt.append('--l1i_size=32kB --l1i_assoc=8')
+    opt.append('--l1i_tag_latency=2')
+    opt.append('--l1i_data_latency=3')
+    opt.append('--l1i_response_latency=2')
+    opt.append('--l1i_mshrs=16')
+    opt.append('--l1i-rp-type=HPRRIPRP')
+    #l1d
+    opt.append('--l1d_size=48kB --l1d_assoc=12')
+    opt.append('--l1d_tag_latency=2')
+    opt.append('--l1d_data_latency=3')
+    opt.append('--l1d_response_latency=2')
+    opt.append('--l1d_mshrs=16')
+    opt.append('--l1d-rp-type=HPRRIPRP')
+    #l2
+    opt.append('--l2_size=1280kB --l2_assoc=10')
+    opt.append('--l2_tag_latency=4')
+    opt.append('--l2_data_latency=9')
+    opt.append('--l2_response_latency=4')
+    opt.append('--l2_mshrs=48')
+    opt.append('--l2-rp-type=HPRRIPRP')
+    #l3
+    opt.append(f'--l3_size={args.l3_assoc * 1024}kB --l3_assoc={args.l3_assoc}')
+    opt.append('--l3_tag_latency=10')
+    opt.append('--l3_data_latency=51')
+    opt.append('--l3_response_latency=10')
+
+    opt.append('--l2-clusivity=mostly_incl')
+    opt.append('--l3-clusivity=mostly_excl')
+
+    opt.append('--mem-type=DDR4_2400_16x4')
+
+    opt.append('--cpu-clock=3.2GHz')
+
+elif args.cache_type == 'skylake':
+    #l1i
+    opt.append('--l1i_size=32kB --l1i_assoc=8')
+    opt.append('--l1i_tag_latency=2')
+    opt.append('--l1i_data_latency=3')
+    opt.append('--l1i_response_latency=2')
+    opt.append('--l1i-rp-type=TreePLRURP')
+    #l1d
+    opt.append('--l1d_size=32kB --l1d_assoc=8')
+    opt.append('--l1d_tag_latency=2')
+    opt.append('--l1d_data_latency=3')
+    opt.append('--l1d_response_latency=2')
+    opt.append('--l1d-rp-type=TreePLRURP')
+    #l2
+    opt.append('--l2_size=1MB --l2_assoc=16')
+    opt.append('--l2_tag_latency=4')
+    opt.append('--l2_data_latency=9')
+    opt.append('--l2_response_latency=4')
+    opt.append('--l2-rp-type=TreePLRURP')
+    #l3
+    opt.append(f'--l3_size={args.l3_assoc * 512}kB --l3_assoc={args.l3_assoc}')
+    opt.append('--l3_tag_latency=10')
+    opt.append('--l3_data_latency=24')
+    opt.append('--l3_response_latency=10')
+
+    opt.append('--l2-clusivity=mostly_incl')
+    opt.append('--l3-clusivity=mostly_excl')
+
+    opt.append('--mem-type=DDR4_2400_16x4')
+
+    opt.append('--cpu-clock=3.2GHz')
+
+else:
+    opt.append('--l1i_size=64kB --l1i_assoc=8')
+    opt.append('--l1d_size=64kB --l1d_assoc=8')
+
+    opt.append('--l2_size=1MB --l2_assoc=8')
+    opt.append(f'--l3_size={args.l3_assoc}MB --l3_assoc={args.l3_assoc}')
+    opt.append('--mem-type=DDR4_2400_16x4')
+
 # opt.append('--l1d-hwp-type=StridePrefetcher')
 opt.append('--l2-hwp-type=BOPPrefetcher')
 
+opt.append('--l3-rp-type=HPRRIPRP')
 
 if args.l3_waymask_set:
     opt.append('--l3_waymask_set="{}"'.format(args.l3_waymask_set))
+if args.l3_qos_csvfile:
+    opt.append('--qos-policy-csvfile="{}"'.format(args.l3_qos_csvfile))
+if args.l3_qos_grow_target:
+    opt.append('--qos-policy-grow-target={}'.format(args.l3_qos_grow_target))
+
+if args.l3_qos_policy_set:
+    opt.append('--l3-qos-policy={}'.format(args.l3_qos_policy_set))
+elif args.l3_qos_csvfile:
+    opt.append('--l3-qos-policy=MaskCsvPolicy')
 
 gcpt_all = [benchmark_cpt_file[bm] for bm in args.benchmark.split("-")]
 
 # use "" around multiple paths connnected by ;
 opt.append('--generic-rv-cpt=' + '"' + ";".join(gcpt_all) + '"')
-opt.append('--gcpt-restorer=' + gcpt_bin_path)
+
+#enable clint for tailbench bms
+bm_all = [bm for bm in args.benchmark.split("-")]
+lint_enables = []
+for i,bm in enumerate(bm_all):
+    if bm in need_clint_sd_works:
+        lint_enables.append(str(i))
+lint_enable_str = "-".join(lint_enables)
+if len(lint_enables) > 0:
+    opt.append('--enable-clint-sets={}'.format(lint_enable_str))
+    opt.append('--gcpt-restorer=' + gcpt_tie_bin_path)
+else:
+    opt.append('--gcpt-restorer=' + gcpt_notie_bin_path)
 
 opt.append('--warmup-insts-no-switch={}'.format(args.warmup))
 if args.insts_afterwarm:
     opt.append('--insts-after-allwarm={}'.format(args.insts_afterwarm))
+if args.insts_stop_event_afterwarm:
+    opt.append('--insts-stop-event-afterwarm={}'.format(args.insts_stop_event_afterwarm))
+if args.insts_test_afterstop:
+    opt.append('--insts-test-afterstop={}'.format(args.insts_test_afterstop))
 # opt.append('-I={}'.format(args.insts))
 
-# opt.append('--mmc-img=/nfs/home/zhangchuanqi/lvna/new_micro/tail-sd.img')
+opt.append('--mmc-img=/nfs/home/share/zhangchuanqi/sd-imgs/full-tail-sd.img')
 
 # ==================  RUN  ==================
 cmd = [binary, outopt, debugf, fspy]

@@ -8,27 +8,30 @@ import json
 
 import itertools
 
+from gem5tasks.cache_sensitive_names import *
+
 my_env = os.environ.copy()
 my_env["LD_PRELOAD"] = '/nfs-nvme/home/share/debug/zhouyaoyang/libz.so.1.2.11.zlib-ng' + os.pathsep + my_env.get("LD_PRELOAD","")
 
-json_path = "/nfs/home/zhangchuanqi/lvna/5g/lazycat-dirtystuff/resources/simpoint_cpt_desc/lazycat_17_gap_tailbench_path.json"
+json_path = "/nfs/home/zhangchuanqi/lvna/5g/DirtyStuff/resources/simpoint_cpt_desc/06_max_path.json"
 script_path = "/nfs/home/zhangchuanqi/lvna/5g/lazycat-dirtystuff/gem5tasks/mix-setconf/xs_mixspec.py"
 
 parser = argparse.ArgumentParser(description='Process some cores.')
 parser.add_argument('-n','--ncores', type=int, default=16)
 parser.add_argument('-W','--warmup',type=int,default=50_000_000)
 parser.add_argument('-A','--insts_afterwarm',type=int,default=50_000_000)
-parser.add_argument('--cache-type',choices=['oldinc','xs','goldencove','skylake'],
-                    required=True)
 args = parser.parse_args()
 
-def find_waymask_mspec(workloads, run_once_script, out_dir_path, threads=1, ncores=128):
+def find_waymask_mspec(workloads_dict, run_once_script, out_dir_path,
+	insts_afterwarm,
+ threads=1, ncores=128):
 	base_arguments = ["python3", run_once_script, "--cpt-json", json_path,
 	 '-W', str(args.warmup),
-	 f'-A={args.insts_afterwarm}',
-	 '--np=1']
-	base_arguments.append('--enable_archdb')
-	base_arguments.append(f'--cache-type={args.cache_type}')
+	 f'-A={insts_afterwarm}',
+	 '--np=2',
+	 '--start-qos-fromstart',
+	 '--nohype']
+	# base_arguments.append('--enable_archdb')
 	proc_count, finish_count = 0, 0
 	max_pending_proc = ncores // threads
 	pending_proc, error_proc = [], []
@@ -42,23 +45,29 @@ def find_waymask_mspec(workloads, run_once_script, out_dir_path, threads=1, ncor
 	print("Free cores:", free_cores)
 
 	# generate new full workloads
-	if args.cache_type == 'oldinc':
-		ass = 16
-	elif args.cache_type == 'goldencove':
-		ass = 12
-	elif args.cache_type == 'skylake':
-		ass = 11
-	else:
-		ass = 8
-
+	ass = 8
+	all_mask = (1<<ass) -1
 	a = []
-	for w in workloads:
-		for i in range(1, ass+1):
-			d = {}
-			d['-b'] = w
-			# i equal to ways for a workload
-			d["highways"] = i
-			a.append(d)
+	for w in workloads_dict:
+		d = {}
+		d["-b"] = w
+		# a.append(d)
+
+		d_waypart = d.copy()
+		# i equal to ways for high priority
+		i = workloads_dict[w]['highways']
+		high_l_mask = (1 << i) - 1
+		low_r_mask = all_mask ^ high_l_mask
+
+		overlap_mask = 1 << (i - 1)
+		low_r_mask |= overlap_mask
+
+		masks = [high_l_mask,low_r_mask,low_r_mask,low_r_mask]
+		d_waypart["l3_waymask_set"] = '-'.join([hex(s) for s in masks])
+		d_waypart["highways"] = i
+		d_waypart['l3_qos_policy_set'] = 'OverlapOnePolicy'
+		a.append(d_waypart)
+
 	workloads = a
 
 	try:
@@ -88,8 +97,12 @@ def find_waymask_mspec(workloads, run_once_script, out_dir_path, threads=1, ncor
 					addition_cmd = []
 					workload_name = workload['-b']
 					addition_cmd.append(f"-b={workload_name}")
-					highways = workload.get("highways")
-					addition_cmd.append(f"--l3_assoc={highways}")
+					highways = workload.get("highways",0)
+					if highways > 0:
+						addition_cmd.append(f"--l3_waymask_set={workload['l3_waymask_set']}")
+						highways = f"{highways}-{workload['l3_qos_policy_set']}"
+					if highways == 0:
+						assert(0)
 					result_path = os.path.join(out_dir_path,f'{workload_name}', f"l3-{highways}")
 					if not os.path.exists(result_path):
 						os.makedirs(result_path, exist_ok=True)
@@ -123,13 +136,34 @@ def find_waymask_mspec(workloads, run_once_script, out_dir_path, threads=1, ncor
 
 
 if __name__ == '__main__':
-	log_dir = f"/nfs/home/zhangchuanqi/lvna/for_xs/catlog/tail_{args.cache_type}_50M-single-profiling/"
-	# cs_works = ['xalancbmk','mcf','omnetpp','sphinx3']
-	with open(json_path) as f:
-		workloads_path_dict = json.load(f)
-	target_workloads = workloads_path_dict.keys()
-	# target_workloads = ['imgdnn','moses','xapian','specjbb','sphinx']
-	find_waymask_mspec(target_workloads,
-	script_path,
+	analyze_base_dir = '/nfs/home/zhangchuanqi/lvna/5g/gem5_data_proc/set_analyze'
+	use_conf = conf_50M
+	insts_afterwarm = 50_000_000
+	test_prefix = use_conf['test_prefix']
+	perf_prefix = '95perf'
+
+	waydict_format = 'cache_work_{}ways'
+
+	#log for 95% perf core0
+	csv_path_top = os.path.join(analyze_base_dir, f'{test_prefix}other/csv/min0way_{perf_prefix}')
+	waydict_name = waydict_format.format(perf_prefix)
+	waydict = use_conf[waydict_name]
+	log_dir = f"/nfs/home/zhangchuanqi/lvna/for_xs/catlog/mix2-qosfromstart-core0-{test_prefix}{perf_prefix}/"
+	
+	target_workload = {}
+
+	for w in waydict:
+		# if w not in ['mcf','xalancbmk']:
+		# 	continue
+		for w1 in waydict:
+			combine_work = '-'.join([w,w1])
+			opts_dict = {}
+			opts_dict['csv_path'] = os.path.join(csv_path_top, f'{w}.csv')
+			opts_dict['highways'] = min(waydict[w],7)
+			target_workload[combine_work] = opts_dict
+
+	find_waymask_mspec(target_workload,
+	"/nfs/home/zhangchuanqi/lvna/5g/DirtyStuff/gem5tasks/mix-setconf/xs_mixspec.py",
 	out_dir_path = log_dir,
+	insts_afterwarm=insts_afterwarm,
 	ncores = args.ncores)
