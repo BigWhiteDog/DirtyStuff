@@ -17,15 +17,11 @@ script_path = "/nfs/home/zhangchuanqi/lvna/5g/lazycat-dirtystuff/gem5tasks/mix-s
 
 parser = argparse.ArgumentParser(description='Process some cores.')
 parser.add_argument('-n','--ncores', type=int, default=16)
-parser.add_argument('--n-simcores', type=int, required=True)
 parser.add_argument('-W','--warmup',type=int,default=50_000_000)
 parser.add_argument('-A','--insts_afterwarm',type=int,default=50_000_000)
 parser.add_argument('--run-types',
 		    choices=['vanilla','fullgrow','growpart','overlap'],
 			required=True)
-parser.add_argument('--grow-policy', type=str, required=True,
-		    choices=['RealOneLessPolicy','NoGrowRealOneLessPolicy'])
-
 parser.add_argument('-p','--part',type=int,required=False)
 
 parser.add_argument('--cache-type',choices=['oldinc','xs','goldencove','skylake'],
@@ -38,7 +34,7 @@ def find_waymask_mspec(workloads_dict, run_once_script, out_dir_path,
 	base_arguments = ["python3", run_once_script, "--cpt-json", json_path,
 	 '-W', str(args.warmup),
 	 f'-A={insts_afterwarm}',
-	 f'--np={args.n_simcores}',
+	 '--np=2',
 	 '--start-qos-fromstart',
 	 '--nohype']
 	# base_arguments.append('--enable_archdb')
@@ -106,7 +102,7 @@ def find_waymask_mspec(workloads_dict, run_once_script, out_dir_path,
 		if (args.run_types == 'growpart') or (args.run_types == 'fullgrow'):
 			for i in runt:
 				d_growpart = d_waypart.copy()
-				d_growpart['l3_qos_policy_set'] = args.grow_policy
+				d_growpart['l3_qos_policy_set'] = 'RealOneLessPolicy'
 				# d_growpart['l3_qos_policy_set'] = 'OneLessGrowTargetPolicy'
 				d_growpart['grow_target'] = math.ceil(all_set / full_grow_parts * i)
 				d_growpart['full_grow_portion'] = f'{i}in{full_grow_parts}'
@@ -205,26 +201,22 @@ def find_waymask_mspec(workloads_dict, run_once_script, out_dir_path,
 
 
 if __name__ == '__main__':
-	cache_type = args.cache_type
-
-	conf_json_base_dir = "/nfs/home/zhangchuanqi/lvna/5g/lazycat-data_proc/set_analyze/conf-json"
-	conf_json_name = f"conf_{cache_type}_tailbm50M.json"
-	select_json = os.path.join(conf_json_base_dir, conf_json_name)
+	conf_json_format = "/nfs/home/zhangchuanqi/lvna/5g/lazycat-data_proc/set_analyze/conf-json/conf_{}_tailbm50M.json"
+	select_json = conf_json_format.format(args.cache_type)
 	with open(select_json,'r') as f:
 		global use_conf
 		use_conf = json.load(f)
 	if use_conf is None:
 		exit(255)
 
-	nsimc = args.n_simcores
-	bm_json_name = f"benchs_{nsimc}_{cache_type}_tailbm50M.json"
-	bm_json = os.path.join(conf_json_base_dir , bm_json_name)
+	bm_json_format = "/nfs/home/zhangchuanqi/lvna/5g/lazycat-data_proc/set_analyze/conf-json/benchs_4_{}_tailbm50M.json"
+	bm_json = bm_json_format.format(args.cache_type)
 	with open(bm_json,'r') as f:
 		use_bm = json.load(f)
 	if use_bm is None:
 		exit(255)
 
-	work_pairs = use_bm[f'{nsimc}bench']
+	work_pairs = use_bm['4bench']
 
 	test_prefix = use_conf['test_prefix']
 	perf_prefix = '95perf'
@@ -235,8 +227,7 @@ if __name__ == '__main__':
 	# csv_path_top = os.path.join(analyze_base_dir, f'{test_prefix}other/csv/min0way_{perf_prefix}')
 	waydict_name = waydict_format.format(perf_prefix)
 	waydict = use_conf[waydict_name]
-	log_base_dir = f"/nfs/home/zhangchuanqi/lvna/for_xs/catlog"
-	log_dir = os.path.join(log_base_dir, f"mix{nsimc}-qosfromstart-core0-{test_prefix}{perf_prefix}/")
+	log_dir = f"/nfs/home/zhangchuanqi/lvna/for_xs/catlog/mix4-{test_prefix}{perf_prefix}/"
 	
 	target_workload = {}
 

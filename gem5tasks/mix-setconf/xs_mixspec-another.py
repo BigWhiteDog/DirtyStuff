@@ -20,7 +20,7 @@ parser.add_argument('--enable_archdb', action='store_true')
 parser.add_argument('--nohype',action='store_true')
 # parser.add_argument('--l3_size_MB',type=int,default=8)
 parser.add_argument('--cache-type',choices=['oldinc','xs','goldencove','skylake',
-                                            'goldencove24M','goldencove48M','goldencoveLRU'],
+                                            'goldencove24M','goldencove48M','goldencovelru'],
                     required=True)
 parser.add_argument('--l3_assoc',type=int,default=8)
 parser.add_argument('--l3_waymask_set', type=str, help="like ff-ff00")

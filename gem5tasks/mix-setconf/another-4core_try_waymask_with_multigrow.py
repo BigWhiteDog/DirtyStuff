@@ -13,7 +13,7 @@ my_env = os.environ.copy()
 my_env["LD_PRELOAD"] = '/nfs-nvme/home/share/debug/zhouyaoyang/libz.so.1.2.11.zlib-ng' + os.pathsep + my_env.get("LD_PRELOAD","")
 
 json_path = "/nfs/home/zhangchuanqi/lvna/5g/lazycat-dirtystuff/resources/simpoint_cpt_desc/lazycat_17_gap_tailbench_path.json"
-script_path = "/nfs/home/zhangchuanqi/lvna/5g/lazycat-dirtystuff/gem5tasks/mix-setconf/xs_mixspec.py"
+script_path = "/nfs/home/zhangchuanqi/lvna/5g/lazycat-dirtystuff/gem5tasks/mix-setconf/xs_mixspec-another.py"
 
 parser = argparse.ArgumentParser(description='Process some cores.')
 parser.add_argument('-n','--ncores', type=int, default=16)
@@ -28,7 +28,8 @@ parser.add_argument('--grow-policy', type=str, required=True,
 
 parser.add_argument('-p','--part',type=int,required=False)
 
-parser.add_argument('--cache-type',choices=['oldinc','xs','goldencove','skylake'],
+parser.add_argument('--cache-type',choices=['oldinc','xs','goldencove','skylake',
+                                            'goldencove24M','goldencove48M'],
                     required=True)
 args = parser.parse_args()
 

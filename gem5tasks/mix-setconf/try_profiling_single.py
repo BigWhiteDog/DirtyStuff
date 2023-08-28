@@ -18,7 +18,8 @@ parser = argparse.ArgumentParser(description='Process some cores.')
 parser.add_argument('-n','--ncores', type=int, default=16)
 parser.add_argument('-W','--warmup',type=int,default=50_000_000)
 parser.add_argument('-A','--insts_afterwarm',type=int,default=50_000_000)
-parser.add_argument('--cache-type',choices=['oldinc','xs','goldencove','skylake'],
+parser.add_argument('--cache-type',choices=['oldinc','xs','goldencove','skylake',
+                                            'goldencove24M','goldencove48M','goldencoveLRU'],
                     required=True)
 args = parser.parse_args()
 
@@ -44,7 +45,7 @@ def find_waymask_mspec(workloads, run_once_script, out_dir_path, threads=1, ncor
 	# generate new full workloads
 	if args.cache_type == 'oldinc':
 		ass = 16
-	elif args.cache_type == 'goldencove':
+	elif 'goldencove' in args.cache_type:
 		ass = 12
 	elif args.cache_type == 'skylake':
 		ass = 11

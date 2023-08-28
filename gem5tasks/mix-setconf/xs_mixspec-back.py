@@ -19,8 +19,7 @@ parser.add_argument('--debug-flag',type=str)
 parser.add_argument('--enable_archdb', action='store_true')
 parser.add_argument('--nohype',action='store_true')
 # parser.add_argument('--l3_size_MB',type=int,default=8)
-parser.add_argument('--cache-type',choices=['oldinc','xs','goldencove','skylake',
-                                            'goldencove24M','goldencove48M','goldencoveLRU'],
+parser.add_argument('--cache-type',choices=['oldinc','xs','goldencove','skylake'],
                     required=True)
 parser.add_argument('--l3_assoc',type=int,default=8)
 parser.add_argument('--l3_waymask_set', type=str, help="like ff-ff00")
@@ -120,44 +119,30 @@ if args.cache_type == 'oldinc':
 
     opt.append('--cpu-clock=2.66GHz')
 
-elif 'goldencove' in args.cache_type:
+elif args.cache_type == 'goldencove':
     #l1i
     opt.append('--l1i_size=32kB --l1i_assoc=8')
     opt.append('--l1i_tag_latency=2')
     opt.append('--l1i_data_latency=3')
     opt.append('--l1i_response_latency=2')
     opt.append('--l1i_mshrs=16')
-    if 'lru' in args.cache_type:
-        opt.append('--l1i-rp-type=LRURP')
-    else:
-        opt.append('--l1i-rp-type=HPRRIPRP')
+    opt.append('--l1i-rp-type=HPRRIPRP')
     #l1d
     opt.append('--l1d_size=48kB --l1d_assoc=12')
     opt.append('--l1d_tag_latency=2')
     opt.append('--l1d_data_latency=3')
     opt.append('--l1d_response_latency=2')
     opt.append('--l1d_mshrs=16')
-    if 'lru' in args.cache_type:
-        opt.append('--l1d-rp-type=LRURP')
-    else:
-        opt.append('--l1d-rp-type=HPRRIPRP')
+    opt.append('--l1d-rp-type=HPRRIPRP')
     #l2
     opt.append('--l2_size=1280kB --l2_assoc=10')
     opt.append('--l2_tag_latency=4')
     opt.append('--l2_data_latency=9')
     opt.append('--l2_response_latency=4')
     opt.append('--l2_mshrs=48')
-    if 'lru' in args.cache_type:
-        opt.append('--l2-rp-type=LRURP')
-    else:
-        opt.append('--l2-rp-type=HPRRIPRP')
+    opt.append('--l2-rp-type=HPRRIPRP')
     #l3
-    if args.cache_type == 'goldencove24M':
-        opt.append(f'--l3_size={args.l3_assoc * 2048}kB --l3_assoc={args.l3_assoc}')
-    elif args.cache_type == 'goldencove48M':
-        opt.append(f'--l3_size={args.l3_assoc * 4096}kB --l3_assoc={args.l3_assoc}')
-    else:
-        opt.append(f'--l3_size={args.l3_assoc * 1024}kB --l3_assoc={args.l3_assoc}')
+    opt.append(f'--l3_size={args.l3_assoc * 1024}kB --l3_assoc={args.l3_assoc}')
     opt.append('--l3_tag_latency=10')
     opt.append('--l3_data_latency=51')
     opt.append('--l3_response_latency=10')
@@ -212,10 +197,7 @@ else:
 # opt.append('--l1d-hwp-type=StridePrefetcher')
 opt.append('--l2-hwp-type=BOPPrefetcher')
 
-if 'lru' in args.cache_type:
-    opt.append('--l3-rp-type=LRURP')
-else:
-    opt.append('--l3-rp-type=HPRRIPRP')
+opt.append('--l3-rp-type=HPRRIPRP')
 
 if args.l3_waymask_set:
     opt.append('--l3_waymask_set="{}"'.format(args.l3_waymask_set))

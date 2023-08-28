@@ -17,7 +17,7 @@ script_path = "/nfs/home/zhangchuanqi/lvna/5g/lazycat-dirtystuff/gem5tasks/mix-s
 
 parser = argparse.ArgumentParser(description='Process some cores.')
 parser.add_argument('-n','--ncores', type=int, default=16)
-parser.add_argument('--n-simcores', type=int, required=True)
+parser.add_argument('--n-simcores', type=int, default=4)
 parser.add_argument('-W','--warmup',type=int,default=50_000_000)
 parser.add_argument('-A','--insts_afterwarm',type=int,default=50_000_000)
 parser.add_argument('--run-types',
@@ -40,6 +40,7 @@ def find_waymask_mspec(workloads_dict, run_once_script, out_dir_path,
 	 f'-A={insts_afterwarm}',
 	 f'--np={args.n_simcores}',
 	 '--start-qos-fromstart',
+	 '--qos-high-ids=0-1',
 	 '--nohype']
 	# base_arguments.append('--enable_archdb')
 	base_arguments
@@ -65,41 +66,57 @@ def find_waymask_mspec(workloads_dict, run_once_script, out_dir_path,
 	all_mask = (1<<ass) -1
 	a = []
 	full_grow_parts = 64
+	onepart = 16
+	grow_step = 2
 	for w in workloads_dict:
 		d = {}
 		d["-b"] = w
-		if (args.run_types == 'vanilla'):
-			a.append(d) #nopart
+		# if (args.run_types == 'vanilla'):
+		# 	a.append(d) #nopart
 
 		d_waypart = d.copy()
-		# i equal to ways for high priority
-		i = workloads_dict[w]['highways']
-		high_l_mask = (1 << i) - 1
-		low_r_mask = all_mask ^ high_l_mask
-		masks = [high_l_mask,low_r_mask,low_r_mask,low_r_mask]
+		w0h = workloads_dict[w]['highways0']
+		w1h = workloads_dict[w]['highways1']
+		high_0_mask = (1 << w0h) - 1
+		high_1_mask = ((1 << w1h) - 1) << w0h
+		low_r_mask = all_mask ^ (high_0_mask | high_1_mask)
+		masks = [high_0_mask,high_1_mask,low_r_mask,low_r_mask]
 		d_waypart["l3_waymask_set"] = '-'.join([hex(s) for s in masks])
-		d_waypart["highways"] = i
+		d_waypart['highways0'] = w0h
+		d_waypart['highways1'] = w1h
 		if (args.run_types == 'vanilla'):
 			a.append(d_waypart) #vanilla way partition
 
-		# d_csvpart = d_waypart.copy()
-		# d_csvpart['csv_path'] = workloads_dict[w]['csv_path']
-		# a.append(d_csvpart)
+		if (args.run_types == 'vanilla'):
+			overlap_0_mask = 1 << (w0h - 1)
+			overlap_1_mask = 1 << (w0h + w1h -1)
+			overlap_0_low_r_mask = overlap_0_mask | low_r_mask
+			overlap_1_low_r_mask = overlap_1_mask | low_r_mask
+			overlap_01_low_r_mask = overlap_0_mask | overlap_1_mask | low_r_mask
+			
+			masks = [high_0_mask,high_1_mask, overlap_0_low_r_mask, overlap_0_low_r_mask]
+			d_overlap_part0 = d_waypart.copy()
+			d_overlap_part0["l3_waymask_set"] = '-'.join([hex(s) for s in masks])
+			d_overlap_part0['l3_qos_policy_set'] = 'Overlap0OnePolicy'
+			a.append(d_overlap_part0)
 
-		d_overlap_part = d_waypart.copy()
-		overlap_mask = 1 << (i - 1)
-		overlap_low_r_mask = overlap_mask | low_r_mask
-		masks = [high_l_mask, overlap_low_r_mask, overlap_low_r_mask, overlap_low_r_mask]
-		d_overlap_part["l3_waymask_set"] = '-'.join([hex(s) for s in masks])
-		d_overlap_part['l3_qos_policy_set'] = 'OverlapOnePolicy'
-		if (args.run_types == 'overlap'):
-			a.append(d_overlap_part)
+			masks = [high_0_mask,high_1_mask, overlap_1_low_r_mask, overlap_1_low_r_mask]
+			d_overlap_part1 = d_waypart.copy()
+			d_overlap_part1["l3_waymask_set"] = '-'.join([hex(s) for s in masks])
+			d_overlap_part1['l3_qos_policy_set'] = 'Overlap1OnePolicy'
+			a.append(d_overlap_part1)
 
-		full_t = list(range(1, full_grow_parts+1))
+			masks = [high_0_mask,high_1_mask, overlap_01_low_r_mask, overlap_01_low_r_mask]
+			d_overlap_part01 = d_waypart.copy()
+			d_overlap_part01["l3_waymask_set"] = '-'.join([hex(s) for s in masks])
+			d_overlap_part01['l3_qos_policy_set'] = 'Overlap01OnePolicy'
+			a.append(d_overlap_part01)
+
+		full_t = list(range(grow_step, full_grow_parts+1, grow_step))
 		if (args.run_types == 'growpart'):
 			p = args.part
-			assert(p*16 >= 0 and p*16 < full_grow_parts)
-			runt = full_t[p*16: (p+1)*16]
+			assert(p*onepart >= 0 and p*onepart < full_grow_parts)
+			runt = full_t[p*onepart: (p+1)*onepart]
 		elif (args.run_types == 'fullgrow'):
 			runt = full_t
 		
@@ -107,15 +124,12 @@ def find_waymask_mspec(workloads_dict, run_once_script, out_dir_path,
 			for i in runt:
 				d_growpart = d_waypart.copy()
 				d_growpart['l3_qos_policy_set'] = args.grow_policy
-				# d_growpart['l3_qos_policy_set'] = 'OneLessGrowTargetPolicy'
-				d_growpart['grow_target'] = math.ceil(all_set / full_grow_parts * i)
+				w0target = math.ceil(all_set / full_grow_parts * workloads_dict[w]['grow_target0'])
+				w1target = math.ceil(all_set / full_grow_parts * i)
+				d_growpart['grow_target'] = '-'.join([str(w0target), str(w1target)])
 				d_growpart['full_grow_portion'] = f'{i}in{full_grow_parts}'
 				a.append(d_growpart)
 
-		# d_growtarget = d_waypart.copy()
-		# d_growtarget['l3_qos_policy_set'] = 'RealOneLessPolicy'
-		# d_growtarget['grow_target'] = workloads_dict[w]['grow_target']
-		# a.append(d_growtarget)
 	workloads = a
 
 	try:
@@ -145,31 +159,20 @@ def find_waymask_mspec(workloads_dict, run_once_script, out_dir_path,
 					addition_cmd = []
 					workload_name = workload['-b']
 					addition_cmd.append(f"-b={workload_name}")
-					highways = workload.get("highways",0)
+					highways = workload.get("highways0",0)
 					if highways > 0:
 						addition_cmd.append(f"--l3_waymask_set={workload['l3_waymask_set']}")
-						if 'csv_path' in workload:
-							#csv part
-							addition_cmd.append(f"--l3_qos_csvfile={workload['csv_path']}")
-							if 'l3_qos_policy_set' in workload:
-								addition_cmd.append(f"--l3_qos_policy_set={workload['l3_qos_policy_set']}")
-								highways = f"{highways}-{workload['l3_qos_policy_set']}"	
+						if 'l3_qos_policy_set' in workload:
+							policy_name = workload['l3_qos_policy_set']
+							if 'Overlap' in policy_name:
+								highways = f"{highways}-{workload['l3_qos_policy_set']}"
 							else:
-								highways = f'{highways}-csv'
-						elif workload.get('l3_qos_policy_set',None) == 'OverlapOnePolicy':
-							#overlap part
-							highways = f"{highways}-{workload['l3_qos_policy_set']}"
-						else:
-							#not csv part
-							if 'l3_qos_policy_set' in workload:
 								addition_cmd.append(f"--l3_qos_policy_set={workload['l3_qos_policy_set']}")
 								highways = f"{highways}-{workload['l3_qos_policy_set']}"
-							if ('grow_target' in workload ):
-								addition_cmd.append(f"--l3_qos_grow_target={workload['grow_target']}")
-							if ('grow_portion' in workload):
-								highways += f"grow{workload['grow_portion']}"
-							elif ('full_grow_portion' in workload):
-								highways += f"fullgrow{workload['full_grow_portion']}"
+								if ('grow_target' in workload ):
+									addition_cmd.append(f"--l3_qos_grow_target={workload['grow_target']}")
+								if ('full_grow_portion' in workload):
+									highways += f"fullgrow{workload['full_grow_portion']}"
 					if highways == 0:
 						highways = 'nopart'
 					result_path = os.path.join(out_dir_path,f'{workload_name}', f"l3-{highways}")
@@ -217,7 +220,7 @@ if __name__ == '__main__':
 		exit(255)
 
 	nsimc = args.n_simcores
-	bm_json_name = f"benchs_{nsimc}_{cache_type}_tailbm50M.json"
+	bm_json_name = f"benchs_2hp_{nsimc}_{cache_type}_tailbm50M.json"
 	bm_json = os.path.join(conf_json_base_dir , bm_json_name)
 	with open(bm_json,'r') as f:
 		use_bm = json.load(f)
@@ -236,18 +239,20 @@ if __name__ == '__main__':
 	waydict_name = waydict_format.format(perf_prefix)
 	waydict = use_conf[waydict_name]
 	log_base_dir = f"/nfs/home/zhangchuanqi/lvna/for_xs/catlog"
-	log_dir = os.path.join(log_base_dir, f"mix{nsimc}-qosfromstart-core0-{test_prefix}{perf_prefix}/")
+	log_dir = os.path.join(log_base_dir, f"mix{nsimc}-2hp-{test_prefix}{perf_prefix}/")
+
+	profiling_w0_grow_dict = use_conf['32_target_0.97_in64']
 	
 	target_workload = {}
 
 	for wp in work_pairs:
 		wlist = wp.split('-')
 		w = wlist[0]
+		w1 = wlist[1]
 		opts_dict = {}
-		# opts_dict['csv_path'] = os.path.join(csv_path_top, f'{w}.csv')
-		# opts_dict['grow_target'] = use_conf['grow_last_target'][w]
-		# opts_dict['grow_target_full'] = use_conf['grow_last_target_full'][w]
-		opts_dict['highways'] = waydict[w]
+		opts_dict['highways0'] = waydict[w]
+		opts_dict['highways1'] = waydict[w1]
+		opts_dict['grow_target0'] = profiling_w0_grow_dict[w]
 		target_workload[wp] = opts_dict
 
 	find_waymask_mspec(target_workload,
